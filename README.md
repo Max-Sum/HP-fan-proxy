@@ -12,7 +12,7 @@ Up: Cutting the ear  /  Middle: Finished male connector  /  Down: "Femal connect
 
 They even have a different connecting schemes on the motherboard and on the fan socket. I found some discussion on the internet showing the connector definition as follows. But my server (DL380e Gen8) have the PWM on Pin 2 on motherboard while PWM on Pin 3 on fan socket. Anyway you just need to find which one connects to the blue wire.
 
-![post-8123-0-98784900-1394609613](/Users/Max/Projects/repos/HP-fan-proxy/images/post-8123-0-98784900-1394609613.png)
+![post-8123-0-98784900-1394609613](https://raw.githubusercontent.com/Max-Sum/HP-fan-proxy/master/images/post-8123-0-98784900-1394609613.png)
 
 ### Software
 The original solution by [executivul](https://www.reddit.com/user/executivul) uses a low pass filter so that the PWM could be read by analog pins in Arduino. But I don't have any capacitors. Instead, I directly connects the PWM inputs to the analog pins and read them for many times then take the average. This turns out to work.
