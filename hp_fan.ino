@@ -1,4 +1,24 @@
-static uint16_t fans[6][2] = {
+#define portOfPin(P)\
+  (((P)>=0&&(P)<8)?&PORTD:(((P)>7&&(P)<14)?&PORTB:&PORTC))
+#define ddrOfPin(P)\
+  (((P)>=0&&(P)<8)?&DDRD:(((P)>7&&(P)<14)?&DDRB:&DDRC))
+#define pinOfPin(P)\
+  (((P)>=0&&(P)<8)?&PIND:(((P)>7&&(P)<14)?&PINB:&PINC))
+#define pinIndex(P)((uint8_t)(P>13?P-14:P&7))
+#define pinMask(P)((uint8_t)(1<<pinIndex(P)))
+
+#define pinAsInput(P) *(ddrOfPin(P))&=~pinMask(P)
+#define pinAsInputPullUp(P) *(ddrOfPin(P))&=~pinMask(P);digitalHigh(P)
+#define pinAsOutput(P) *(ddrOfPin(P))|=pinMask(P)
+#define digitalLow(P) *(portOfPin(P))&=~pinMask(P)
+#define digitalHigh(P) *(portOfPin(P))|=pinMask(P)
+#define isHigh(P)((*(pinOfPin(P))& pinMask(P))>0)
+#define isLow(P)((*(pinOfPin(P))& pinMask(P))==0)
+#define digitalState(P)((uint8_t)isHigh(P))
+
+#define fixTime(t)((uint16_t)t*64)
+
+const uint8_t fans[6][2] = {
   {A0, 11},
   {A1, 10},
   {A2, 9},
@@ -16,40 +36,33 @@ static float matrix[6][7] = {
 };
 static float min_fan[6] = {0.16, 0.17, 0.17, 0.18, 0.18, 0.18};
 float fan_val[6];
-// Sample factor * 100 is the sample time.
-static int sample_factor = 15;
-static uint8_t ave_n = 10;
-static uint16_t min_v = 645, max_v = 715;
-float volt = 677.0;
+const int sample = 25000;
 
 void setup() {
   uint8_t i;
   for (i = 0; i < 6; i++) {
-    pinMode(fans[i][0], INPUT);
-    pinMode(fans[i][1], OUTPUT);
+    pinAsInput(fans[i][0]);
+    pinAsOutput(fans[i][1]);
   }
+  // Set to 31.25kHz to reach 25kHz requirement
+  TCCR0B = _BV(CS00);
+  TCCR1B = _BV(CS00);
+  TCCR2B = _BV(CS00);
+  TCCR0A = _BV(COM0A1) | _BV(COM0B1) | _BV(WGM00); 
   Serial.begin(115200);
   Serial.println("HP fan proxy");
 
 }
 
-void readPWM(int pin, float* pwm, uint16_t* v) {
+float readPWM(int pin) {
   uint32_t total = 0;
-  uint16_t ana_in;
-  *pwm = 0;
-  for (uint8_t i = 0; i < sample_factor; i++){
-    for (uint8_t j = 0; j < 100; j++) {
-      ana_in = analogRead(pin);
-      // Keeping the on voltage.
-      if (ana_in > *v) *v = ana_in;
-      total += ana_in;
-    }
-    *pwm += total / 100.0 / sample_factor;
-    total = 0;
+  uint32_t low = 0;
+  for (uint16_t i = 0; i < sample; i++) {
+    low += isLow(pin);
+    total ++;
   }
-  // Reversed PWM
-  *pwm = (volt-*pwm)/volt;
-  return ;
+  // Inversed PWM
+  return (float) low / total;
 }
 
 void update_volt(uint16_t v) {
@@ -61,10 +74,11 @@ void update_volt(uint16_t v) {
 void loop() {
   float out;
   uint8_t pwm_out;
-  uint16_t v = 0;
   for (uint8_t i = 0; i < 6; i++) {
-    fan_val[i] = out = 0;
-    readPWM(fans[i][0], &fan_val[i], &v);
+    fan_val[i] = readPWM(fans[i][0]);
+  }
+  for (uint8_t i = 0; i < 6; i++) {
+    out = 0;
     // Compute using matrix and previous data
     for (uint8_t j = 0; j < 6; j++) {
       out += matrix[i][j] * fan_val[j];
@@ -76,9 +90,9 @@ void loop() {
     }
     pwm_out = 255 - out * 255;
     analogWrite(fans[i][1], pwm_out);
-    Serial.print("Fan["); Serial.print(i+1); Serial.print("] iLO:"); Serial.print(fan_val[i] * 100); Serial.print("% Out:"); Serial.print(out*100); Serial.print("% Diff:"); Serial.print((fan_val[i] - out) * 100); Serial.println("%");
+    Serial.print("Fan["); Serial.print(i + 1); Serial.print("] iLO:"); Serial.print(fan_val[i] * 100); Serial.print("% Out:"); Serial.print(out * 100); Serial.print("% Diff:"); Serial.print((fan_val[i] - out) * 100); Serial.println("%");
   }
-  update_volt(v);
-  Serial.print("Voltage: ");Serial.print(volt / 204.6);Serial.println("V");
   Serial.println("---");
+  delay(fixTime(1000));
 }
+
