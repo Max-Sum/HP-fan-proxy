@@ -65,12 +65,6 @@ float readPWM(int pin) {
   return (float) low / total;
 }
 
-void update_volt(uint16_t v) {
-  // Prevent wrong reading
-  if (v < min_v || v > max_v) return;
-  volt += (v - volt) / ave_n;
-}
-
 void loop() {
   float out;
   uint8_t pwm_out;
